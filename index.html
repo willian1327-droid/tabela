@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Germina - Sistema de Tabela de Preços</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Tela de Login -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <div class="logo-container">
+                <div class="logo-circle">
+                    <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                        <path d="M20 5C15 5 12 8 12 13C12 16 13 18 15 20L20 35L25 20C27 18 28 16 28 13C28 8 25 5 20 5Z" fill="white"/>
+                        <circle cx="20" cy="13" r="3" fill="#2E7D32"/>
+                    </svg>
+                </div>
+                <h1>Germina</h1>
+                <p>Sistema de Tabela de Preços</p>
+            </div>
+
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" required placeholder="seu@email.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Senha</label>
+                    <input type="password" id="password" required placeholder="••••••">
+                </div>
+
+                <button type="submit" id="btnLogin" class="btn-primary">
+                    <span id="btnLoginText">Entrar</span>
+                    <span id="btnLoginLoading" style="display: none;">Entrando...</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="dashboard" style="display: none;">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo-circle-small">
+                    <svg width="24" height="24" viewBox="0 0 40 40" fill="none">
+                        <path d="M20 5C15 5 12 8 12 13C12 16 13 18 15 20L20 35L25 20C27 18 28 16 28 13C28 8 25 5 20 5Z" fill="white"/>
+                        <circle cx="20" cy="13" r="3" fill="#2E7D32"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Germina</h2>
+                    <p>Tabela de Preços</p>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <span class="admin-badge">🛡️ Admin</span>
+                <span id="userEmail" class="user-email"></span>
+                <button onclick="downloadPriceTable()" class="btn-icon" title="Baixar tabela">📥</button>
+                <button onclick="logout()" class="btn-secondary">Sair</button>
+            </div>
+        </header>
+
+        <!-- Tax Banner -->
+        <div id="taxBanner" class="tax-banner">
+            <span>📊 <strong id="taxName">Tributação</strong>: <span id="taxValue">5% ICMS</span></span>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="tab-button active" data-tab="importar" onclick="switchTab('importar')">
+                <span>📤</span> Importar
+            </button>
+            <button class="tab-button" data-tab="categorias" onclick="switchTab('categorias')">
+                <span>📂</span> Categorias
+            </button>
+            <button class="tab-button" data-tab="produtos" onclick="switchTab('produtos')">
+                <span>📦</span> Produtos
+            </button>
+            <button class="tab-button" data-tab="estoque" onclick="switchTab('estoque')">
+                <span>📊</span> Estoque
+            </button>
+            <button class="tab-button" data-tab="avisos" onclick="switchTab('avisos')">
+                <span>📢</span> Avisos
+            </button>
+            <button class="tab-button" data-tab="usuarios" onclick="switchTab('usuarios')">
+                <span>👥</span> Usuários
+            </button>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Tab: Importar -->
+            <div id="tab-importar" class="tab-content active">
+                <div class="content-header">
+                    <h3>📤 Importar Tabela de Preços</h3>
+                    <p>Selecione uma categoria e importe uma planilha Excel com os produtos</p>
+                </div>
+
+                <div class="import-section">
+                    <div class="form-group">
+                        <label>1. Selecione ou crie uma categoria</label>
+                        <div class="input-group">
+                            <select id="importCategory" class="input-select">
+                                <option value="">Selecione uma categoria...</option>
+                            </select>
+                            <button onclick="openNewCategoryModal()" class="btn-secondary">+ Nova Categoria</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>2. Importe a planilha Excel</label>
+                        <div class="file-upload-area" id="fileUploadArea">
+                            <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+                            <button onclick="document.getElementById('fileInput').click()" class="btn-upload">
+                                Escolher ficheiro
+                            </button>
+                            <p id="fileName">Nenhum ficheiro selecionado</p>
+                        </div>
+                        <p class="help-text">A planilha deve ter colunas: <strong>Produto</strong>, <strong>Unidade</strong> e <strong>Preço</strong></p>
+                    </div>
+
+                    <button id="btnImport" onclick="importProducts()" class="btn-primary" disabled>
+                        Importar Produtos
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab: Categorias -->
+            <div id="tab-categorias" class="tab-content">
+                <div class="content-header">
+                    <h3>📂 Categorias</h3>
+                    <p>Gerencie as categorias de produtos</p>
+                </div>
+
+                <div id="categoriesGrid" class="categories-grid">
+                    <!-- Categorias serão inseridas aqui -->
+                </div>
+            </div>
+
+            <!-- Tab: Produtos -->
+            <div id="tab-produtos" class="tab-content">
+                <div class="content-header">
+                    <div>
+                        <h3>📦 Todos os Produtos</h3>
+                        <p id="productsCount">0 produtos cadastrados</p>
+                    </div>
+                    <button onclick="openAddProductModal()" class="btn-primary">+ Adicionar</button>
+                </div>
+
+                <div id="productsSection">
+                    <!-- Produtos por categoria serão inseridos aqui -->
+                </div>
+            </div>
+
+            <!-- Tab: Estoque -->
+            <div id="tab-estoque" class="tab-content">
+                <div class="content-header">
+                    <h3>📊 Importar Estoque</h3>
+                    <p>Selecione uma categoria e importe uma planilha Excel com os itens de estoque</p>
+                </div>
+
+                <div class="import-section">
+                    <div class="sub-tabs">
+                        <button class="sub-tab active" onclick="switchSubTab('importar')">📤 Importar</button>
+                        <button class="sub-tab" onclick="switchSubTab('categorias')">📂 Categorias</button>
+                        <button class="sub-tab" onclick="switchSubTab('itens')">📦 Itens</button>
+                    </div>
+
+                    <div id="subtab-importar" class="subtab-content active">
+                        <div class="form-group">
+                            <label>1. Selecione ou crie uma categoria</label>
+                            <div class="input-group">
+                                <select id="stockCategory" class="input-select">
+                                    <option value="">Selecione uma categoria...</option>
+                                </select>
+                                <button onclick="openNewCategoryModal()" class="btn-secondary">+ Nova Categoria</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>2. Importe a planilha Excel</label>
+                            <div class="file-upload-area">
+                                <input type="file" id="stockFileInput" accept=".xlsx,.xls" style="display: none;">
+                                <button onclick="document.getElementById('stockFileInput').click()" class="btn-upload">
+                                    Escolher ficheiro
+                                </button>
+                                <p id="stockFileName">Nenhum ficheiro selecionado</p>
+                            </div>
+                            <p class="help-text">A planilha deve ter colunas: <strong>Produto</strong>, <strong>Unidade</strong> e <strong>Quantidade</strong></p>
+                        </div>
+
+                        <button id="btnImportStock" onclick="importStock()" class="btn-primary" disabled>
+                            Importar Estoque
+                        </button>
+                    </div>
+
+                    <div id="subtab-categorias" class="subtab-content">
+                        <div id="stockCategoriesGrid" class="categories-grid"></div>
+                    </div>
+
+                    <div id="subtab-itens" class="subtab-content">
+                        <div id="stockItemsSection"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Avisos -->
+            <div id="tab-avisos" class="tab-content">
+                <div class="content-header">
+                    <div>
+                        <h3>📢 Quadro de Avisos</h3>
+                        <p>Gerencie os avisos exibidos para todos os usuários</p>
+                    </div>
+                    <button onclick="openAddAnnouncementModal()" class="btn-primary">+ Novo Aviso</button>
+                </div>
+
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Título</th>
+                            <th>Prévia</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="announcementsTable">
+                        <!-- Avisos serão inseridos aqui -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Tab: Usuários -->
+            <div id="tab-usuarios" class="tab-content">
+                <div class="content-header">
+                    <h3>👥 Gestão de Usuários</h3>
+                    <p>Cadastre novos vendedores para acessar o sistema</p>
+                </div>
+
+                <div class="user-form-section">
+                    <h4>Adicionar Novo Usuário</h4>
+                    <form id="createUserForm" onsubmit="createUser(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Nome Completo *</label>
+                                <input type="text" id="newUserName" required placeholder="Nome do usuário">
+                            </div>
+                            <div class="form-group">
+                                <label>Email *</label>
+                                <input type="email" id="newUserEmail" required placeholder="email@exemplo.com">
+                            </div>
+                            <div class="form-group">
+                                <label>Senha *</label>
+                                <input type="password" id="newUserPassword" required minlength="6" placeholder="Mínimo 6 caracteres">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary">+ Cadastrar Usuário</button>
+                    </form>
+                </div>
+
+                <div class="users-list-section">
+                    <h4>Usuários Cadastrados</h4>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTable">
+                            <!-- Usuários serão inseridos aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="modalOverlay" class="modal-overlay" onclick="closeAllModals()"></div>
+
+    <!-- Modal: Nova Categoria -->
+    <div id="categoryModal" class="modal">
+        <div class="modal-header">
+            <h3 id="categoryModalTitle">Nova Categoria</h3>
+            <button onclick="closeCategoryModal()" class="btn-close">&times;</button>
+        </div>
+        <form id="categoryForm" onsubmit="saveCategory(event)">
+            <input type="hidden" id="categoryId">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nome da Categoria *</label>
+                    <input type="text" id="categoryName" required>
+                </div>
+                <div class="form-group">
+                    <label>Unidades Permitidas</label>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" value="TN"> TN (Tonelada)</label>
+                        <label><input type="checkbox" value="KG"> KG (Quilograma)</label>
+                        <label><input type="checkbox" value="LT"> LT (Litro)</label>
+                        <label><input type="checkbox" value="UN"> UN (Unidade)</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeCategoryModal()" class="btn-secondary">Cancelar</button>
+                <button type="submit" class="btn-primary">Salvar</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Modal: Produto -->
+    <div id="productModal" class="modal">
+        <div class="modal-header">
+            <h3 id="productModalTitle">Adicionar Produto</h3>
+            <button onclick="closeProductModal()" class="btn-close">&times;</button>
+        </div>
+        <form id="productForm" onsubmit="saveProduct(event)">
+            <input type="hidden" id="productId">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nome do Produto *</label>
+                    <input type="text" id="productName" required>
+                </div>
+                <div class="form-group">
+                    <label>Preço (R$) *</label>
+                    <input type="number" id="productPrice" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label>Descrição</label>
+                    <textarea id="productDescription" rows="3"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Unidade *</label>
+                        <input type="text" id="productUnit" required placeholder="Ex: TN, KG">
+                    </div>
+                    <div class="form-group">
+                        <label>Categoria *</label>
+                        <select id="productCategory" required>
+                            <option value="">Selecione...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeProductModal()" class="btn-secondary">Cancelar</button>
+                <button type="submit" class="btn-primary">Salvar</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Modal: Aviso -->
+    <div id="announcementModal" class="modal">
+        <div class="modal-header">
+            <h3 id="announcementModalTitle">Novo Aviso</h3>
+            <button onclick="closeAnnouncementModal()" class="btn-close">&times;</button>
+        </div>
+        <form id="announcementForm" onsubmit="saveAnnouncement(event)">
+            <input type="hidden" id="announcementId">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Título *</label>
+                    <input type="text" id="announcementTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Conteúdo *</label>
+                    <textarea id="announcementContent" rows="5" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="announcementActive" checked>
+                        Ativo (visível para usuários)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeAnnouncementModal()" class="btn-secondary">Cancelar</button>
+                <button type="submit" class="btn-primary">Salvar</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Modal: Confirmação de Exclusão -->
+    <div id="deleteModal" class="modal modal-small">
+        <div class="modal-header">
+            <h3>⚠️ Confirmar Exclusão</h3>
+            <button onclick="closeDeleteModal()" class="btn-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p>Tem certeza que deseja excluir?</p>
+            <p><strong id="deleteItemName"></strong></p>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeDeleteModal()" class="btn-secondary">Cancelar</button>
+            <button onclick="confirmDelete()" class="btn-danger">Excluir</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
