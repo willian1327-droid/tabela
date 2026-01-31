@@ -17,16 +17,38 @@ let deleteCallback = null;
 // =====================================================
 window.addEventListener('DOMContentLoaded', async () => {
     // Aguardar o Supabase estar disponível
+    console.log('🔍 Verificando Supabase...');
+    console.log('window.supabase:', typeof window.supabase);
+    
     if (typeof window.supabase === 'undefined') {
-        console.error('Supabase não carregado!');
+        console.error('❌ Supabase não carregado!');
         alert('Erro ao carregar sistema. Recarregue a página.');
         return;
     }
     
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    console.log('✅ Supabase inicializado');
+    console.log('✅ Supabase disponível');
     
-    await checkAuth();
+    try {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('✅ Cliente Supabase criado:', supabase);
+        
+        // Testar conexão
+        const { data, error } = await supabase.from('categories').select('count');
+        console.log('🧪 Teste de conexão:', { data, error });
+        
+        if (error) {
+            console.error('❌ Erro na conexão:', error);
+            alert('Erro ao conectar com o banco de dados: ' + error.message);
+            return;
+        }
+        
+        console.log('✅ Conexão OK!');
+        await checkAuth();
+        
+    } catch (err) {
+        console.error('❌ Erro crítico:', err);
+        alert('Erro ao inicializar: ' + err.message);
+    }
 });
 
 // =====================================================
