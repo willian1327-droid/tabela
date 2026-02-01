@@ -1,13 +1,163 @@
 // =====================================================
 // GERMINA - Sistema de Tabela de Preços
-// app.js - Versão com CDN global
+// app.js - Versão standalone (sem CDN)
 // =====================================================
 
-// Aguardar o Supabase carregar via CDN
 const SUPABASE_URL = 'https://igbvisxkwxfyftfdhotq.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlnYnZpc3hrd3hmeWZ0ZmRob3RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3OTUwMTEsImV4cCI6MjA4NTM3MTAxMX0.Xkgl_zETPl8vfe4YcQS77LhyKrh7zcbGAF36HC5amgU';
 
-let supabase;
+// Cliente Supabase customizado usando fetch
+const supabase = {
+    auth: {
+        async signInWithPassword({ email, password }) {
+            const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                return { data: null, error: data };
+            }
+            
+            // Salvar sessão
+            localStorage.setItem('supabase_session', JSON.stringify(data));
+            return { data, error: null };
+        },
+        
+        async getSession() {
+            const sessionStr = localStorage.getItem('supabase_session');
+            if (!sessionStr) {
+                return { data: { session: null }, error: null };
+            }
+            
+            try {
+                const session = JSON.parse(sessionStr);
+                // Verificar se expirou
+                if (session.expires_at && session.expires_at < Date.now() / 1000) {
+                    localStorage.removeItem('supabase_session');
+                    return { data: { session: null }, error: null };
+                }
+                return { data: { session }, error: null };
+            } catch {
+                return { data: { session: null }, error: null };
+            }
+        },
+        
+        async signOut() {
+            localStorage.removeItem('supabase_session');
+            return { error: null };
+        }
+    },
+    
+    from(table) {
+        const session = JSON.parse(localStorage.getItem('supabase_session') || '{}');
+        const token = session.access_token || SUPABASE_ANON_KEY;
+        
+        return {
+            async select(columns = '*') {
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${columns}`, {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    return { data: null, error: data };
+                }
+                
+                return { 
+                    data, 
+                    error: null,
+                    eq: (column, value) => ({
+                        async single() {
+                            const filtered = data.find(item => item[column] === value);
+                            return { data: filtered || null, error: filtered ? null : { message: 'Not found' } };
+                        }
+                    }),
+                    order: (column, opts) => ({ data, error: null }),
+                    in: (column, values) => ({ data, error: null })
+                };
+            },
+            
+            async insert(values) {
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify(values)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    return { data: null, error };
+                }
+                
+                return { data: values, error: null };
+            },
+            
+            update(values) {
+                return {
+                    async eq(column, value) {
+                        const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${column}=eq.${value}`, {
+                            method: 'PATCH',
+                            headers: {
+                                'apikey': SUPABASE_ANON_KEY,
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json',
+                                'Prefer': 'return=minimal'
+                            },
+                            body: JSON.stringify(values)
+                        });
+                        
+                        if (!response.ok) {
+                            const error = await response.json();
+                            return { error };
+                        }
+                        
+                        return { error: null };
+                    }
+                };
+            },
+            
+            delete() {
+                return {
+                    async eq(column, value) {
+                        const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${column}=eq.${value}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'apikey': SUPABASE_ANON_KEY,
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            const error = await response.json();
+                            return { error };
+                        }
+                        
+                        return { error: null };
+                    }
+                };
+            }
+        };
+    }
+};
+
 let currentUser = null;
 let currentTab = 'importar';
 let deleteCallback = null;
@@ -16,39 +166,9 @@ let deleteCallback = null;
 // INICIALIZAÇÃO
 // =====================================================
 window.addEventListener('DOMContentLoaded', async () => {
-    // Aguardar o Supabase estar disponível
-    console.log('🔍 Verificando Supabase...');
-    console.log('window.supabase:', typeof window.supabase);
-    
-    if (typeof window.supabase === 'undefined') {
-        console.error('❌ Supabase não carregado!');
-        alert('Erro ao carregar sistema. Recarregue a página.');
-        return;
-    }
-    
-    console.log('✅ Supabase disponível');
-    
-    try {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log('✅ Cliente Supabase criado:', supabase);
-        
-        // Testar conexão
-        const { data, error } = await supabase.from('categories').select('count');
-        console.log('🧪 Teste de conexão:', { data, error });
-        
-        if (error) {
-            console.error('❌ Erro na conexão:', error);
-            alert('Erro ao conectar com o banco de dados: ' + error.message);
-            return;
-        }
-        
-        console.log('✅ Conexão OK!');
-        await checkAuth();
-        
-    } catch (err) {
-        console.error('❌ Erro crítico:', err);
-        alert('Erro ao inicializar: ' + err.message);
-    }
+    console.log('✅ Sistema Germina iniciado');
+    console.log('✅ Cliente Supabase customizado carregado');
+    await checkAuth();
 });
 
 // =====================================================
@@ -68,12 +188,13 @@ async function checkAuth() {
     const { data: roleData, error: roleError } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', currentUser.id)
-        .single();
+        .eq('user_id', currentUser.id);
     
-    console.log('Role check:', roleData, roleError);
+    const role = await roleData.single();
     
-    if (roleError || !roleData || roleData.role !== 'admin') {
+    console.log('Role check:', role, roleError);
+    
+    if (roleError || !role.data || role.data.role !== 'admin') {
         alert('Acesso negado! Apenas administradores.');
         await supabase.auth.signOut();
         showLogin();
@@ -117,7 +238,7 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
             password
         });
         
-        if (error) throw error;
+        if (error) throw new Error(error.message || error.msg || 'Erro ao fazer login');
         
         currentUser = data.user;
         await checkAuth();
@@ -138,7 +259,7 @@ window.logout = async function() {
 };
 
 // =====================================================
-// NAVEGAÇÃO ENTRE ABAS
+// NAVEGAÇÃO
 // =====================================================
 window.switchTab = function(tabName) {
     currentTab = tabName;
@@ -156,37 +277,14 @@ window.switchTab = function(tabName) {
     loadTabData(tabName);
 };
 
-window.switchSubTab = function(subTabName) {
-    document.querySelectorAll('.sub-tab').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    event.target.classList.add('active');
-    
-    document.querySelectorAll('.subtab-content').forEach(content => {
-        content.classList.remove('active');
-    });
-    document.getElementById(`subtab-${subTabName}`).classList.add('active');
-};
-
 async function loadTabData(tabName) {
+    console.log('Carregando aba:', tabName);
     switch(tabName) {
-        case 'importar':
-            await loadCategoriesForImport();
-            break;
         case 'categorias':
             await loadCategories();
             break;
         case 'produtos':
             await loadProducts();
-            break;
-        case 'estoque':
-            await loadStockCategories();
-            break;
-        case 'avisos':
-            await loadAnnouncements();
-            break;
-        case 'usuarios':
-            await loadUsers();
             break;
     }
 }
@@ -201,12 +299,11 @@ async function loadAllData() {
 async function loadTaxSettings() {
     const { data: settings } = await supabase
         .from('settings')
-        .select('*')
-        .in('key', ['tax_name', 'tax_percentage']);
+        .select('*');
     
-    if (settings) {
-        const taxName = settings.find(s => s.key === 'tax_name')?.value || 'Tributação';
-        const taxPercentage = settings.find(s => s.key === 'tax_percentage')?.value || '5';
+    if (settings && settings.data) {
+        const taxName = settings.data.find(s => s.key === 'tax_name')?.value || 'Tributação';
+        const taxPercentage = settings.data.find(s => s.key === 'tax_percentage')?.value || '5';
         
         document.getElementById('taxName').textContent = taxName;
         document.getElementById('taxValue').textContent = `${taxPercentage}% ${taxName}`;
@@ -219,18 +316,14 @@ async function loadTaxSettings() {
 async function loadCategories() {
     const { data: categories, error } = await supabase
         .from('categories')
-        .select(`
-            *,
-            products(count)
-        `)
-        .order('name');
+        .select('*');
     
     if (error) {
         console.error('Erro ao carregar categorias:', error);
         return;
     }
     
-    displayCategories(categories);
+    displayCategories(categories.data || []);
 }
 
 function displayCategories(categories) {
@@ -243,18 +336,12 @@ function displayCategories(categories) {
     }
     
     categories.forEach(category => {
-        const productCount = category.products?.[0]?.count || 0;
         const card = document.createElement('div');
         card.className = 'category-card';
         card.innerHTML = `
             <div class="category-card-header">
                 <div>
                     <h4>${category.name}</h4>
-                    <p class="category-count">${productCount} produtos</p>
-                </div>
-                <div class="category-actions">
-                    <button onclick="editCategory('${category.id}')" class="action-btn" title="Editar">✏️</button>
-                    <button onclick="deleteCategory('${category.id}', '${category.name}')" class="action-btn" title="Excluir">🗑️</button>
                 </div>
             </div>
             <div class="category-units">
@@ -265,130 +352,14 @@ function displayCategories(categories) {
     });
 }
 
-async function loadCategoriesForImport() {
-    const { data: categories } = await supabase
-        .from('categories')
-        .select('*')
-        .order('name');
-    
-    const selects = ['importCategory', 'stockCategory', 'productCategory'];
-    selects.forEach(selectId => {
-        const select = document.getElementById(selectId);
-        if (select) {
-            select.innerHTML = '<option value="">Selecione uma categoria...</option>';
-            categories?.forEach(cat => {
-                select.innerHTML += `<option value="${cat.id}">${cat.name}</option>`;
-            });
-        }
-    });
-}
-
-window.openNewCategoryModal = function() {
-    document.getElementById('categoryModalTitle').textContent = 'Nova Categoria';
-    document.getElementById('categoryForm').reset();
-    document.getElementById('categoryId').value = '';
-    openModal('categoryModal');
-};
-
-window.editCategory = async function(categoryId) {
-    const { data: category } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('id', categoryId)
-        .single();
-    
-    if (category) {
-        document.getElementById('categoryModalTitle').textContent = 'Editar Categoria';
-        document.getElementById('categoryId').value = category.id;
-        document.getElementById('categoryName').value = category.name;
-        
-        document.querySelectorAll('#categoryForm input[type="checkbox"]').forEach(cb => {
-            cb.checked = category.units?.includes(cb.value);
-        });
-        
-        openModal('categoryModal');
-    }
-};
-
-window.saveCategory = async function(event) {
-    event.preventDefault();
-    
-    const categoryId = document.getElementById('categoryId').value;
-    const name = document.getElementById('categoryName').value;
-    const units = Array.from(document.querySelectorAll('#categoryForm input[type="checkbox"]:checked'))
-        .map(cb => cb.value);
-    
-    const categoryData = { name, units };
-    
-    try {
-        if (categoryId) {
-            const { error } = await supabase
-                .from('categories')
-                .update(categoryData)
-                .eq('id', categoryId);
-            if (error) throw error;
-        } else {
-            const { error } = await supabase
-                .from('categories')
-                .insert([categoryData]);
-            if (error) throw error;
-        }
-        
-        alert(categoryId ? 'Categoria atualizada!' : 'Categoria criada!');
-        closeCategoryModal();
-        await loadCategories();
-        await loadCategoriesForImport();
-        
-    } catch (error) {
-        alert('Erro: ' + error.message);
-    }
-};
-
-window.deleteCategory = function(categoryId, categoryName) {
-    openDeleteModal(categoryName, async () => {
-        const { error } = await supabase
-            .from('categories')
-            .delete()
-            .eq('id', categoryId);
-        
-        if (error) {
-            alert('Erro ao excluir: ' + error.message);
-        } else {
-            alert('Categoria excluída!');
-            await loadCategories();
-            await loadCategoriesForImport();
-        }
-    });
-};
-
-window.closeCategoryModal = function() {
-    closeModal('categoryModal');
-};
-
-// =====================================================
-// PRODUTOS - Funções básicas
-// =====================================================
 async function loadProducts() {
     const { data: products } = await supabase
         .from('products')
-        .select(`*, category:categories(name)`)
-        .order('name');
+        .select('*');
     
     const section = document.getElementById('productsSection');
-    document.getElementById('productsCount').textContent = `${products?.length || 0} produtos cadastrados`;
-    section.innerHTML = products?.length ? '<p>Produtos carregados</p>' : '<p>Nenhum produto</p>';
-}
-
-async function loadStockCategories() {
-    console.log('Carregando estoque...');
-}
-
-async function loadAnnouncements() {
-    console.log('Carregando avisos...');
-}
-
-async function loadUsers() {
-    console.log('Carregando usuários...');
+    document.getElementById('productsCount').textContent = `${products.data?.length || 0} produtos cadastrados`;
+    section.innerHTML = products.data?.length ? '<p>Produtos carregados</p>' : '<p>Nenhum produto</p>';
 }
 
 // =====================================================
@@ -411,23 +382,4 @@ window.closeAllModals = function() {
     });
 };
 
-function openDeleteModal(itemName, callback) {
-    document.getElementById('deleteItemName').textContent = itemName;
-    deleteCallback = callback;
-    openModal('deleteModal');
-}
-
-window.confirmDelete = async function() {
-    if (deleteCallback) {
-        await deleteCallback();
-        deleteCallback = null;
-    }
-    closeDeleteModal();
-};
-
-window.closeDeleteModal = function() {
-    closeModal('deleteModal');
-    deleteCallback = null;
-};
-
-console.log('✅ App.js carregado');
+console.log('✅ App.js standalone carregado com sucesso');
