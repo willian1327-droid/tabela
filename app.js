@@ -396,6 +396,60 @@ async function loadProducts() {
 }
 
 // =====================================================
+// CRIAR USUÁRIO
+// =====================================================
+window.createUser = async function(event) {
+    event.preventDefault();
+    
+    const name = document.getElementById('newUserName').value;
+    const email = document.getElementById('newUserEmail').value;
+    const password = document.getElementById('newUserPassword').value;
+    
+    if (!confirm(`Criar usuário: ${email}?`)) return;
+    
+    const btnSubmit = event.target.querySelector('button[type="submit"]');
+    const originalText = btnSubmit.textContent;
+    btnSubmit.disabled = true;
+    btnSubmit.textContent = 'Criando...';
+    
+    try {
+        // Obter token atual
+        const session = JSON.parse(localStorage.getItem('supabase_session') || '{}');
+        const token = session.access_token;
+        
+        if (!token) {
+            throw new Error('Sessão expirada. Faça login novamente.');
+        }
+        
+        // Chamar Edge Function
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/create-user`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, password, name })
+        });
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Erro ao criar usuário');
+        }
+        
+        alert('✅ Usuário criado com sucesso!\n\nO usuário pode fazer login com:\nEmail: ' + email);
+        document.getElementById('createUserForm').reset();
+        
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('❌ Erro ao criar usuário: ' + error.message);
+    } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = originalText;
+    }
+};
+
+// =====================================================
 // MODAIS
 // =====================================================
 function openModal(modalId) {
